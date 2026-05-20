@@ -3,14 +3,21 @@
 
 #define CDECL NOSPLIT|NOFRAME
 
+// In ABI0, the stack is guaranteed to be aligned to 8 bytes, not 16.
+// We must manually align the stack to 16 bytes when using the SysV ABI.
+// https://go.dev/src/cmd/compile/abi-internal#stack-layout
 #define INVOKE_BEG(N) \
    LEAQ a0+0(FP), AX        /* ax=frame */ \
-   SUBQ $(8*(N)), SP /* */
+   PUSHQ BX                 /* save caller's BX */ \
+   MOVQ SP, BX              /* BX=post-push SP */ \
+   ANDQ $-16, SP            /* 16-byte aligned SP */ \
+   SUBQ $(16*((N+1)/2)), SP /* reserve scratch area */
 #define INVOKE_FIN(N) \
-   CALL (AX)               /* call proc */ \
-   ADDQ $(8*(N)), SP /* */ \
+   CALL (AX)                  /* call proc */ \
+   MOVQ BX, SP                /* restore SP value */ \
+   POPQ BX                    /* restore BX, */ \
    MOVQ AX, ret+((N)+1)*8(FP) /* ret=AX */ \
-   RET                   /* return */
+   RET                        /* return */
 
 // func CCall0(proc uintptr) uintptr
 TEXT ·CCall0(SB),CDECL,$0
